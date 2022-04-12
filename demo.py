@@ -15,6 +15,8 @@ def low_filter(ft_matrix, threshold):
                 ft_filter[i][j] = ft_matrix[i][j]
     # ft_matrix[ft_matrix < threshold] = 0
     return ft_filter
+
+
 #
 #
 # def normalize(data):
@@ -75,15 +77,20 @@ def process_audio(source_path, n_fft):
     pha = np.exp(1j * np.angle(ft))
     ft_abs = np.abs(ft)
     return x, ft_abs, pha, sr
+
+
 #
 
 
-SOURCE_PATH_PHN = r'E:\PythonProject\timit\dr1-fvmh0\sa1.phn'
-SOURCE_PATH_WAV = r'E:\PythonProject\timit\dr1-fvmh0\sa1.wav'
+SOURCE_PATH_PHN = r'E:\PythonProject\timit\dr1-fvmh0\si836.phn'
+SOURCE_PATH_WAV = r'E:\PythonProject\timit\dr1-fvmh0\si836.wav'
 PHN = ['iy', 'ih', 'eh', 'ey', 'ae', 'aa', 'aw', 'ay', 'ah', 'ao', 'oy', 'ow', 'uh', 'uw',
        'ux', 'er', 'ax', 'ix', 'arx', 'ax-h']  # 20个元音音素
 n_fft = 512
-threshold = 2.7
+threshold = [6.46225429, 6.18555432, 6.79467397, 6.64343743, 6.40981119, 6.73703657,
+             6.38226626, 6.33572403, 6.62456894, 6.69065477, 6.47778466, 6.63663315,
+             6.61620321, 6.64334202, 6.45145042, 6.48007743, 6.58611123, 6.2056657,
+             6.41311746, 6.45255511, 6.77838382]
 
 x, ft_abs, pha, sr = process_audio(SOURCE_PATH_WAV, n_fft=512)
 process_index = find_phon(SOURCE_PATH_PHN, PHN, hope_length=n_fft // 4, win_length=n_fft)
@@ -91,7 +98,7 @@ for i in range(0, len(process_index)):
     strat_index = process_index[i][0]
     end_index = process_index[i][1]
     ft_abs[:, strat_index - 1:end_index - 1] = \
-        low_filter(ft_abs[:, strat_index - 1:end_index - 1], threshold)
+        low_filter(ft_abs[:, strat_index - 1:end_index - 1], threshold[i])
 '''重建滤波后的音频'''
 ft = ft_abs * pha
 y_hat = librosa.istft(ft, n_fft=n_fft, hop_length=n_fft // 4, win_length=n_fft)
@@ -103,4 +110,3 @@ print(trans_result)
 # ft_filter = ft_abs_filter * pha
 # y_hat = librosa.istft(ft_filter)
 # print(calculate_MSE(x, y_hat))
-

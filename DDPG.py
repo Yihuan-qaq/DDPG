@@ -47,18 +47,18 @@ LR_A = 0.001  # learning rate for actor
 LR_C = 0.002  # learning rate for critic
 GAMMA = 0.9  # reward discount
 TAU = 0.01  # soft replacement
-MEMORY_CAPACITY = 1000  # size of replay buffer
-BATCH_SIZE = 128  # update batchsize
+MEMORY_CAPACITY = 500  # size of replay buffer
+BATCH_SIZE = 32  # update batchsize
 
-MAX_EPISODES = 10  # total number of episodes for training
-MAX_EP_STEPS = 1000  # total number of steps for each episode
+MAX_EPISODES = 20  # total number of episodes for training
+MAX_EP_STEPS = 500  # total number of steps for each episode
 TEST_PER_EPISODES = 10  # test the model per episodes
-VAR = 1  # control exploration
+VAR = 0.5  # control exploration
 
 PHN = ['iy', 'ih', 'eh', 'ey', 'ae', 'aa', 'aw', 'ay', 'ah', 'ao', 'oy', 'ow', 'uh', 'uw',
        'ux', 'er', 'ax', 'ix', 'arx', 'ax-h']  # 20个元音音素
-SOURCE_PATH_PHN = r'E:\PythonProject\timit\dr1-fvmh0\sa1.phn'
-SOURCE_PATH_WAV = r'E:\PythonProject\timit\dr1-fvmh0\sa1.wav'
+SOURCE_PATH_PHN = r'E:\PythonProject\timit\dr1-fvmh0\si836.phn'
+SOURCE_PATH_WAV = r'E:\PythonProject\timit\dr1-fvmh0\si836.wav'
 
 
 ###############################  DDPG  ####################################
@@ -273,6 +273,9 @@ if __name__ == '__main__':
         print('----start to train----')
         reward_buffer = []  # 用于记录每个EP的reward，统计变化
         t0 = time.time()  # 统计时间
+        s_record = np.zeros(s_dim, dtype=float)
+        epoch_record = 0
+        r_max = 0
         for i in range(MAX_EPISODES):
             t1 = time.time()
             s = env.reset()
@@ -281,21 +284,23 @@ if __name__ == '__main__':
             avg_S = 0
             for j in range(MAX_EP_STEPS):
                 # Add exploration noise
-                a = ddpg.choose_action(s)  # 这里很简单，直接用actor估算出a动作
+                a = ddpg.choose_action(s).numpy()
+                # 这里很简单，直接用actor估算出a动作
 
                 # 为了能保持开发，这里用了另外一种方式增加探索。
                 # 因此需要需要以a为均值，VAR为标准差，建立正态分布，再从正态分布采样出a
                 # 因为a是均值，所以a的概率是最大的。但a相对其他概率由多大，是靠VAR调整。这里我们其实可以增加更新VAR，动态调整a的确定性
                 # 然后进行裁剪
-                if s <= 0:
-                    a = np.abs(np.clip(np.random.normal(a, VAR), -2, 2))
-                else:
-                    a = np.clip(np.random.normal(a, VAR), -2, 2)
+                for dim in range(0, len(s[0])):
+                    if s[0][dim] <= 0:
+                        a[0][dim] = np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.5, 0.5))
+                    else:
+                        a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.5, 0.5)
                 # 与环境进行互动
                 s_, r, done, temp_asr_time = env.step(s, a)
                 asr_time += temp_asr_time
                 # 保存s，a，r，s_
-                ddpg.store_transition(s, a, r / 10, s_)
+                ddpg.store_transition(s[0], a[0], r, s_[0])
                 # ddpg.store_transition(s, a, r, s_)
 
                 # 第一次数据满了，就可以开始学习
@@ -305,11 +310,17 @@ if __name__ == '__main__':
 
                 # 输出数据记录
                 s = s_
+                if r > r_max:
+                    r_max_record = s[0]
+                    ep_reward = i
                 avg_S += s[0]
                 ep_reward += r  # 记录当前EP的总reward
+                # 每100步输出一次s
+                if (j + 1) % 100 == 0:
+                    print(s)
                 if j == MAX_EP_STEPS - 1:
                     print(
-                        '\rEpisode: {}/{}  | Episode Reward: {:.4f}  | ASR Time: {:.4f} | AVG Threshold: {:.4f} '
+                        '\rEpisode: {}/{}  | Episode Reward: {:.4f}  | ASR Time: {:.4f} | AVG Threshold: {} '
                         '| Running Time: {:.4f}'.format(
                             i + 1, MAX_EPISODES, ep_reward,
                             asr_time,
@@ -318,7 +329,7 @@ if __name__ == '__main__':
                         ), end=''
                     )
                     print('\n')
-                plt.show()
+                # plt.show()
             # test
             if i and not i % TEST_PER_EPISODES:
                 print('----start to test----')
@@ -327,7 +338,7 @@ if __name__ == '__main__':
                 ep_reward = 0
                 for j in range(MAX_EP_STEPS):
 
-                    a = ddpg.choose_action(s)  # 注意，在测试的时候，我们就不需要用正态分布了，直接一个a就可以了。
+                    a = ddpg.choose_action(s).numpy()  # 注意，在测试的时候，我们就不需要用正态分布了，直接一个a就可以了。
                     s_, r, done, _ = env.step(s, a)
 
                     s = s_
@@ -339,22 +350,24 @@ if __name__ == '__main__':
                                 time.time() - t1
                             )
                         )
+        print('\n record_done_s', s_record)
+        print('\n record_epoch:', epoch_record)
+                        # reward_buffer.append(ep_reward)
 
-                        reward_buffer.append(ep_reward)
-
-            if reward_buffer:
-                plt.ion()
-                plt.cla()
-                plt.title('DDPG')
-                plt.plot(np.array(range(len(reward_buffer))) * TEST_PER_EPISODES, reward_buffer)  # plot the episode vt
-                plt.xlabel('episode steps')
-                plt.ylabel('normalized state-action value')
-                # plt.ylim(-2000, 0)
-                plt.show()
-                plt.pause(0.1)
-        plt.ioff()
-        plt.show()
+        #     if reward_buffer:
+        #         plt.ion()
+        #         plt.cla()
+        #         plt.title('DDPG')
+        #         plt.plot(np.array(range(len(reward_buffer))) * TEST_PER_EPISODES, reward_buffer)  # plot the episode vt
+        #         plt.xlabel('episode steps')
+        #         plt.ylabel('normalized state-action value')
+        #         # plt.ylim(-2000, 0)
+        #         plt.show()
+        #         plt.pause(0.1)
+        # plt.ioff()
+        # plt.show()
         print('\nRunning time: ', time.time() - t0)
+
         ddpg.save_ckpt()
 
     # test

@@ -22,16 +22,17 @@ class Env(object):
             print("----source result :{}".format(self.source_result))
         else:
             self.source_result = self.temp_source_result
-        # self.done = False
-        # self.r = 0
-        self.bound_high = 1
-        self.bound_low = -1
-        self.s_dim = 1
-        self.a_dim = 1
+
         '''Init FFT param'''
         self.n_fft = 512
         self.win_length = self.n_fft
         self.hope_length = self.win_length // 4
+
+        self.bound_high = 1
+        self.bound_low = -1
+        self.process_index = self.find_phon()
+        self.s_dim = len(self.process_index)
+        self.a_dim = self.s_dim
 
     def process_audio(self, source_path):
         x, sr = soundfile.read(source_path)
@@ -106,7 +107,7 @@ class Env(object):
             wer_value = wer(source_result, processed_result)
 
         global_ft_abs, source_pha, sr = self.process_audio(source_path)
-        global_ft_abs_filter = self.low_filter(global_ft_abs, threshold)
+        global_ft_abs_filter = self.low_filter(global_ft_abs, max(threshold))
         global_ft = global_ft_abs_filter * source_pha
         global_ft_hat = librosa.istft(global_ft, n_fft=self.n_fft, hop_length=self.hope_length, win_length=self.win_length)
 
@@ -119,7 +120,7 @@ class Env(object):
             return 0
         else:
             MSE_ratio = MSE1 / MSE2
-            r = (wer_value - MSE_ratio) * 100 - abs(threshold) * 7  # 5太小10太大
+            r = wer_value * 100 - np.mean(threshold) * 5  # 5太小10太大
             return r
 
     def step(self, s, a):
@@ -133,16 +134,19 @@ class Env(object):
         """
         done = False
         r = 0
+        STATE_HIGH_BOUND = 10
+
         s_ = s + a
+        s_[0][s_[0] > STATE_HIGH_BOUND] = np.random.uniform(0, (STATE_HIGH_BOUND / 5))  # 限制阈值最大为10
         threshold = s_[0]
         ft_abs, pha, sr = self.process_audio(self.source_path_wav)
-        process_index = self.find_phon()
+        process_index = self.process_index
         '''滤波'''
         for i in range(0, len(process_index)):
             strat_index = process_index[i][0]
             end_index = process_index[i][1]
             ft_abs[:, strat_index - 1:end_index - 1] = \
-                self.low_filter(ft_abs[:, strat_index - 1:end_index - 1], threshold)
+                self.low_filter(ft_abs[:, strat_index - 1:end_index - 1], threshold[i])
         '''重建滤波后的音频'''
         ft = ft_abs * pha
         y_hat = librosa.istft(ft, n_fft=self.n_fft, hop_length=self.hope_length, win_length=self.win_length)
@@ -151,7 +155,8 @@ class Env(object):
         t0 = time.time()
         trans_result = ASR.asr_api(temp_wirte_path, 'google')
         t1 = time.time()
-        r = self.calculate_reward(self.source_result, trans_result, self.source_path_wav, phn_hat=y_hat, threshold=threshold)
+        r = self.calculate_reward(self.source_result, trans_result, self.source_path_wav, phn_hat=y_hat,
+                                  threshold=threshold)
         # wer_result = wer(trans_result, self.source_result)
         # if trans_result != self.source_result:
         #     done = True
@@ -171,7 +176,8 @@ class Env(object):
         初始化状态
         :return: 状态s
         """
-        s = np.random.uniform(0, 5)
+        Max = 2  # 随机生成小数的最大值
+        s = np.random.rand(self.s_dim) * Max
         return np.array([s], dtype=float)
 
     def action_space_high(self):
