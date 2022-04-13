@@ -48,6 +48,7 @@ class Env(object):
         第n帧的pcm数据点范围 = [win_length * (n - 1) - hop_length, win_length * n - hop_length]
         :return: (pcm数据点)stft转换后帧的起始和截止的边界[strat,end]
         """
+        EXPEND_FRAME = 2  # 扩展下帧数
         process_index = []
         '''加载并处理phn文件'''
         with open(self.source_path_phn) as f:
@@ -63,8 +64,8 @@ class Env(object):
                     process_index.append(temp_list)
         '''将pcm下表转换为帧的下标'''
         for i_ in range(0, len(process_index)):
-            process_index[i_][0] = (process_index[i_][0] + self.hope_length) // self.win_length
-            process_index[i_][1] = (process_index[i_][1] + self.hope_length) // self.win_length + 1
+            process_index[i_][0] = (process_index[i_][0] + self.hope_length) // self.win_length - EXPEND_FRAME
+            process_index[i_][1] = (process_index[i_][1] + self.hope_length) // self.win_length + 1 + EXPEND_FRAME
         return process_index
 
     def low_filter(self, ft_matrix, threshold):

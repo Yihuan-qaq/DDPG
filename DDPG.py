@@ -50,7 +50,7 @@ TAU = 0.01  # soft replacement
 MEMORY_CAPACITY = 500  # size of replay buffer
 BATCH_SIZE = 32  # update batchsize
 
-MAX_EPISODES = 20  # total number of episodes for training
+MAX_EPISODES = 10  # total number of episodes for training
 MAX_EP_STEPS = 500  # total number of steps for each episode
 TEST_PER_EPISODES = 10  # test the model per episodes
 VAR = 0.5  # control exploration
