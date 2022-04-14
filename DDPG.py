@@ -48,18 +48,19 @@ LR_A = 0.001  # learning rate for actor
 LR_C = 0.002  # learning rate for critic
 GAMMA = 0.9  # reward discount
 TAU = 0.01  # soft replacement
-MEMORY_CAPACITY = 100  # size of replay buffer
-BATCH_SIZE = 16  # update batchsize
+MEMORY_CAPACITY = 200  # size of replay buffer
+BATCH_SIZE = 32  # update batchsize
 
-MAX_EPISODES = 10  # total number of episodes for training
+MAX_EPISODES = 20  # total number of episodes for training
 MAX_EP_STEPS = 100  # total number of steps for each episode
 TEST_PER_EPISODES = 10  # test the model per episodes
-RELACE_ITER = 20
+RELACE_ITER = 50
 VAR = 0.2  # control exploration
 
 # PHN = ['iy', 'ih', 'eh', 'ey', 'ae', 'aa', 'aw', 'ay', 'ah', 'ao', 'oy', 'ow', 'uh', 'uw',
 #        'ux', 'er', 'ax', 'ix', 'arx', 'ax-h']  # 20个元音音素
-PHN = ['jh', 'ch', 's', 'sh', 'z', 'zh', 'f', 'th', 'v', 'dh']  # 摩擦音与破擦音
+PHN = ['jh', 'ch', 's', 'sh', 'z', 'zh', 'f', 'th', 'v', 'dh', 'b', 'd', 'g', 'p', 't', 'k',
+       'dx', 'q']  # 摩擦音/破擦音/爆破音
 SOURCE_PATH_PHN = r'example\si836.phn'
 SOURCE_PATH_WAV = r'example\si836.wav'
 
@@ -283,6 +284,7 @@ if __name__ == '__main__':
         epoch_record = 0
         r_max = 0.0
         r = -10000.0
+        total_reward = []
         for i in range(MAX_EPISODES):
             t1 = time.time()
             s = env.reset()
@@ -330,14 +332,13 @@ if __name__ == '__main__':
                     r_max_record = s[0]
                     r_max = r
                     epoch_record = i
-                avg_S += s[0]
-                ep_reward += r  # 记录当前EP的总reward
-                # 每100步输出一次s
-                if (j + 1) % 20 == 0:
                     print('\n temp_record_done_r', r_max)
                     print('\n temp_record_done_s', r_max_record)
                     print('\n temp_record_epoch:', epoch_record)
+                avg_S += s[0]
+                ep_reward += r  # 记录当前EP的总reward
                 if j == MAX_EP_STEPS - 1:
+                    total_reward.append(ep_reward)
                     print(
                         '\rEpisode: {}/{}  | Episode Reward: {:.4f}  | ASR Time: {:.4f} | AVG Threshold: {} '
                         '| Running Time: {:.4f}'.format(
@@ -350,25 +351,31 @@ if __name__ == '__main__':
                     print('\n')
                 # plt.show()
             # test
-            if i and not i % TEST_PER_EPISODES:
-                print('----start to test----')
-                t1 = time.time()
-                s = env.reset()
-                ep_reward = 0
-                for j in range(MAX_EP_STEPS):
-
-                    a = ddpg.choose_action(s).numpy()  # 注意，在测试的时候，我们就不需要用正态分布了，直接一个a就可以了。
-                    s_, r, done, _ = env.step(s, a)
-
-                    s = s_
-                    ep_reward += r
-                    if j == MAX_EP_STEPS - 1:
-                        print(
-                            '\rEpisode: {}/{}  | Episode Reward: {:.4f}  | Running Time: {:.4f}'.format(
-                                i + 1, MAX_EPISODES, ep_reward,
-                                time.time() - t1
-                            )
-                        )
+            # if i and not i % TEST_PER_EPISODES:
+            #     print('----start to test----')
+            #     t1 = time.time()
+            #     s = env.reset()
+            #     ep_reward = 0
+            #     for j in range(MAX_EP_STEPS):
+            #
+            #         a = ddpg.choose_action(s).numpy()  # 注意，在测试的时候，我们就不需要用正态分布了，直接一个a就可以了。
+            #         s_, r, done, _ = env.step(s, a)
+            #
+            #         s = s_
+            #         ep_reward += r
+            #         if j == MAX_EP_STEPS - 1:
+            #             print(
+            #                 '\rEpisode: {}/{}  | Episode Reward: {:.4f}  | Running Time: {:.4f}'.format(
+            #                     i + 1, MAX_EPISODES, ep_reward,
+            #                     time.time() - t1
+            #                 )
+            #             )
+        plt.figure()
+        plt.title('Reward')
+        plt.xlabel('episode steps')
+        plt.ylabel('reward value')
+        plt.plot(np.array(range(MAX_EPISODES)), total_reward)
+        plt.show()
         print('\n final_record_done_r', r_max)
         print('\n final_record_done_s', r_max_record)
         print('\n final_record_epoch:', epoch_record)
