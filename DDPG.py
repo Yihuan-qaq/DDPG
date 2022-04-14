@@ -30,8 +30,9 @@ from Env import Env
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
-
+from Logger import Logger
 import tensorlayer as tl
+import sys
 
 parser = argparse.ArgumentParser(description='Train or test neural net motor controller.')
 parser.add_argument('--train', dest='train', action='store_true', default=True)
@@ -47,13 +48,14 @@ LR_A = 0.001  # learning rate for actor
 LR_C = 0.002  # learning rate for critic
 GAMMA = 0.9  # reward discount
 TAU = 0.01  # soft replacement
-MEMORY_CAPACITY = 500  # size of replay buffer
-BATCH_SIZE = 32  # update batchsize
+MEMORY_CAPACITY = 100  # size of replay buffer
+BATCH_SIZE = 16  # update batchsize
 
 MAX_EPISODES = 10  # total number of episodes for training
-MAX_EP_STEPS = 500  # total number of steps for each episode
+MAX_EP_STEPS = 100  # total number of steps for each episode
 TEST_PER_EPISODES = 10  # test the model per episodes
-VAR = 0.5  # control exploration
+RELACE_ITER = 20
+VAR = 0.2  # control exploration
 
 PHN = ['iy', 'ih', 'eh', 'ey', 'ae', 'aa', 'aw', 'ay', 'ah', 'ao', 'oy', 'ow', 'uh', 'uw',
        'ux', 'er', 'ax', 'ix', 'arx', 'ax-h']  # 20个元音音素
@@ -197,7 +199,9 @@ class DDPG(object):
         a_grads = tape.gradient(a_loss, self.actor.trainable_weights)
         self.actor_opt.apply_gradients(zip(a_grads, self.actor.trainable_weights))
 
-        self.ema_update()
+        if (self.pointer + 1) % RELACE_ITER == 0:
+            print('\nParas Update')
+            self.ema_update()
 
     # 保存s，a，r，s_
     def store_transition(self, s, a, r, s_):
@@ -249,7 +253,8 @@ class DDPG(object):
 
 
 if __name__ == '__main__':
-
+    # 记录控制台信息到日志中
+    sys.stdout = Logger(sys.stdout)
     # 初始化环境
     env = Env(PHN, SOURCE_PATH_WAV, SOURCE_PATH_PHN)
 
@@ -273,9 +278,10 @@ if __name__ == '__main__':
         print('----start to train----')
         reward_buffer = []  # 用于记录每个EP的reward，统计变化
         t0 = time.time()  # 统计时间
-        s_record = np.zeros(s_dim, dtype=float)
+        r_max_record = np.zeros(s_dim, dtype=float)
         epoch_record = 0
-        r_max = 0
+        r_max = 0.0
+        r = -10000.0
         for i in range(MAX_EPISODES):
             t1 = time.time()
             s = env.reset()
@@ -291,11 +297,22 @@ if __name__ == '__main__':
                 # 因此需要需要以a为均值，VAR为标准差，建立正态分布，再从正态分布采样出a
                 # 因为a是均值，所以a的概率是最大的。但a相对其他概率由多大，是靠VAR调整。这里我们其实可以增加更新VAR，动态调整a的确定性
                 # 然后进行裁剪
-                for dim in range(0, len(s[0])):
-                    if s[0][dim] <= 0:
-                        a[0][dim] = np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.5, 0.5))
-                    else:
-                        a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.5, 0.5)
+                # 如果返回的r小于最好的r，那么：大阈值变小一点，小阈值变大一点
+
+                if r < r_max and ddpg.pointer > MEMORY_CAPACITY:
+                    for dim in range(0, len(s[0])):
+                        if 0 < s[0][dim] <= 1:
+                            a[0][dim] = np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.5, 0.5))
+                        elif s[0][dim] >= 2:
+                            a[0][dim] = -np.abs(np.clip(np.random.normal(a[0][dim], VAR), -1, 1))
+                        else:
+                            a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.5, 0.5)
+                else:
+                    for dim in range(0, len(s[0])):
+                        if s[0][dim] <= 0:
+                            a[0][dim] = np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.5, 0.5))
+                        else:
+                            a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.5, 0.5)
                 # 与环境进行互动
                 s_, r, done, temp_asr_time = env.step(s, a)
                 asr_time += temp_asr_time
@@ -304,7 +321,7 @@ if __name__ == '__main__':
                 # ddpg.store_transition(s, a, r, s_)
 
                 # 第一次数据满了，就可以开始学习
-                if ddpg.pointer > MEMORY_CAPACITY:
+                if ddpg.pointer > MEMORY_CAPACITY and (ddpg.pointer + 1) % 5 == 0:
                     # print('----learn----')
                     ddpg.learn()
 
@@ -312,12 +329,15 @@ if __name__ == '__main__':
                 s = s_
                 if r > r_max:
                     r_max_record = s[0]
-                    ep_reward = i
+                    r_max = r
+                    epoch_record = i
                 avg_S += s[0]
                 ep_reward += r  # 记录当前EP的总reward
                 # 每100步输出一次s
-                if (j + 1) % 100 == 0:
-                    print(s)
+                if (j + 1) % 20 == 0:
+                    print('\n temp_record_done_r', r_max)
+                    print('\n temp_record_done_s', r_max_record)
+                    print('\n temp_record_epoch:', epoch_record)
                 if j == MAX_EP_STEPS - 1:
                     print(
                         '\rEpisode: {}/{}  | Episode Reward: {:.4f}  | ASR Time: {:.4f} | AVG Threshold: {} '
@@ -350,8 +370,9 @@ if __name__ == '__main__':
                                 time.time() - t1
                             )
                         )
-        print('\n record_done_s', s_record)
-        print('\n record_epoch:', epoch_record)
+        print('\n final_record_done_r', r_max)
+        print('\n final_record_done_s', r_max_record)
+        print('\n final_record_epoch:', epoch_record)
                         # reward_buffer.append(ep_reward)
 
         #     if reward_buffer:

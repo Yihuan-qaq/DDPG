@@ -64,8 +64,8 @@ class Env(object):
                     process_index.append(temp_list)
         '''将pcm下表转换为帧的下标'''
         for i_ in range(0, len(process_index)):
-            process_index[i_][0] = (process_index[i_][0] + self.hope_length) // self.win_length - EXPEND_FRAME
-            process_index[i_][1] = (process_index[i_][1] + self.hope_length) // self.win_length + 1 + EXPEND_FRAME
+            process_index[i_][0] = process_index[i_][0] * 4 // self.win_length
+            process_index[i_][1] = process_index[i_][1] * 4 // self.win_length + 1
         return process_index
 
     def low_filter(self, ft_matrix, threshold):
@@ -121,7 +121,7 @@ class Env(object):
             return 0
         else:
             MSE_ratio = MSE1 / MSE2
-            r = wer_value * 100 - np.mean(threshold) * 5  # 5太小10太大
+            r = wer_value * 100 - MSE_ratio * 90 - np.mean(threshold) * 40  # 5太小10太大
             return r
 
     def step(self, s, a):
@@ -136,9 +136,11 @@ class Env(object):
         done = False
         r = 0
         STATE_HIGH_BOUND = 10
+        STATE_LOW_BOUND = 0
 
         s_ = s + a
         s_[0][s_[0] > STATE_HIGH_BOUND] = np.random.uniform(0, (STATE_HIGH_BOUND / 5))  # 限制阈值最大为10
+        s_[0][s_[0] < STATE_LOW_BOUND] = np.random.uniform(0, 1)
         threshold = s_[0]
         ft_abs, pha, sr = self.process_audio(self.source_path_wav)
         process_index = self.process_index
