@@ -28,8 +28,8 @@ class Env(object):
         self.win_length = self.n_fft
         self.hope_length = self.win_length // 4
 
-        self.bound_high = 1
-        self.bound_low = -1
+        self.bound_high = 0.2
+        self.bound_low = -0.2
         self.process_index = self.find_phon()
         self.s_dim = len(self.process_index)
         self.a_dim = self.s_dim
@@ -121,7 +121,8 @@ class Env(object):
             return 0
         else:
             MSE_ratio = MSE1 / MSE2
-            r = wer_value * 100 - MSE_ratio * 90 - np.mean(threshold) * 40  # 5太小10太大
+            mean_threshold = np.mean(threshold)
+            r = wer_value * 100 - MSE_ratio * 90 - mean_threshold * 40  # 5太小10太大
             return r
 
     def step(self, s, a):
@@ -135,12 +136,12 @@ class Env(object):
         """
         done = False
         r = 0
-        STATE_HIGH_BOUND = 10
-        STATE_LOW_BOUND = 0
+        STATE_HIGH_BOUND = 2
+        STATE_LOW_BOUND = 0.2
 
         s_ = s + a
-        s_[0][s_[0] > STATE_HIGH_BOUND] = np.random.uniform(0, (STATE_HIGH_BOUND / 5))  # 限制阈值最大为10
-        s_[0][s_[0] < STATE_LOW_BOUND] = np.random.uniform(0, 1)
+        s_[0][s_[0] > STATE_HIGH_BOUND] = np.random.uniform(0, 1)  # 限制阈值最大为10
+        s_[0][s_[0] < STATE_LOW_BOUND] = np.random.uniform(0, 1) * STATE_LOW_BOUND
         threshold = s_[0]
         ft_abs, pha, sr = self.process_audio(self.source_path_wav)
         process_index = self.process_index
@@ -179,7 +180,7 @@ class Env(object):
         初始化状态
         :return: 状态s
         """
-        Max = 2  # 随机生成小数的最大值
+        Max = 0.5  # 随机生成小数的最大值
         s = np.random.rand(self.s_dim) * Max
         return np.array([s], dtype=float)
 

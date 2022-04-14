@@ -30,7 +30,7 @@ from Env import Env
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
-from Logger import Logger
+# from Logger import Logger
 import tensorlayer as tl
 import sys
 
@@ -57,10 +57,11 @@ TEST_PER_EPISODES = 10  # test the model per episodes
 RELACE_ITER = 20
 VAR = 0.2  # control exploration
 
-PHN = ['iy', 'ih', 'eh', 'ey', 'ae', 'aa', 'aw', 'ay', 'ah', 'ao', 'oy', 'ow', 'uh', 'uw',
-       'ux', 'er', 'ax', 'ix', 'arx', 'ax-h']  # 20个元音音素
-SOURCE_PATH_PHN = r'E:\PythonProject\timit\dr1-fvmh0\si836.phn'
-SOURCE_PATH_WAV = r'E:\PythonProject\timit\dr1-fvmh0\si836.wav'
+# PHN = ['iy', 'ih', 'eh', 'ey', 'ae', 'aa', 'aw', 'ay', 'ah', 'ao', 'oy', 'ow', 'uh', 'uw',
+#        'ux', 'er', 'ax', 'ix', 'arx', 'ax-h']  # 20个元音音素
+PHN = ['jh', 'ch', 's', 'sh', 'z', 'zh', 'f', 'th', 'v', 'dh']  # 摩擦音与破擦音
+SOURCE_PATH_PHN = r'example\si836.phn'
+SOURCE_PATH_WAV = r'example\si836.wav'
 
 
 ###############################  DDPG  ####################################
@@ -254,7 +255,7 @@ class DDPG(object):
 
 if __name__ == '__main__':
     # 记录控制台信息到日志中
-    sys.stdout = Logger(sys.stdout)
+    # sys.stdout = Logger(sys.stdout)
     # 初始化环境
     env = Env(PHN, SOURCE_PATH_WAV, SOURCE_PATH_PHN)
 
@@ -301,18 +302,16 @@ if __name__ == '__main__':
 
                 if r < r_max and ddpg.pointer > MEMORY_CAPACITY:
                     for dim in range(0, len(s[0])):
-                        if 0 < s[0][dim] <= 1:
-                            a[0][dim] = np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.5, 0.5))
-                        elif s[0][dim] >= 2:
-                            a[0][dim] = -np.abs(np.clip(np.random.normal(a[0][dim], VAR), -1, 1))
+                        if s[0][dim] >= 1:
+                            a[0][dim] = -np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1))
                         else:
-                            a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.5, 0.5)
+                            a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1)
                 else:
                     for dim in range(0, len(s[0])):
                         if s[0][dim] <= 0:
-                            a[0][dim] = np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.5, 0.5))
+                            a[0][dim] = np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1))
                         else:
-                            a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.5, 0.5)
+                            a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1)
                 # 与环境进行互动
                 s_, r, done, temp_asr_time = env.step(s, a)
                 asr_time += temp_asr_time
@@ -373,7 +372,7 @@ if __name__ == '__main__':
         print('\n final_record_done_r', r_max)
         print('\n final_record_done_s', r_max_record)
         print('\n final_record_epoch:', epoch_record)
-                        # reward_buffer.append(ep_reward)
+        # reward_buffer.append(ep_reward)
 
         #     if reward_buffer:
         #         plt.ion()
