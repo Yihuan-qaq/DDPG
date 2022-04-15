@@ -32,8 +32,8 @@ class Env(object):
         self.FLAG_VALUE = -100  # 标记音素没有出现位置的值
         self.bound_high = 0.2
         self.bound_low = -0.2
-        self.STATE_HIGH_BOUND = 2
-        self.STATE_LOW_BOUND = 0.1
+        self.STATE_HIGH_BOUND = 10
+        self.STATE_LOW_BOUND = 0
         self.process_index_dict = self.find_phon()
         self.s_dim = len(self.process_index_dict)
         self.a_dim = self.s_dim
@@ -117,8 +117,11 @@ class Env(object):
         for i in range(len(s)):
             if threshold[i] == self.FLAG_VALUE:
                 threshold_reward[i] = 0
-            elif s[i] <= self.STATE_LOW_BOUND and a[i] <= 0:
-                threshold_reward[i] = np.abs(threshold[i]) * 50
+            elif s[i] <= self.STATE_LOW_BOUND:
+                if a[i] <= 0:
+                    threshold_reward[i] = np.abs(threshold[i]) * 50
+                else:
+                    threshold_reward[i] = np.abs(threshold[i]) * 10
             elif s[i] >= self.STATE_HIGH_BOUND and a[i] >= 0:
                 threshold_reward[i] = threshold[i] * 5
             else:
@@ -164,11 +167,10 @@ class Env(object):
         done = False
         r = 0
         s_ = s + a
-        """限制阈值范围"""
-        s_[0][s_[0] > self.STATE_HIGH_BOUND] = self.STATE_HIGH_BOUND
-        s_[0][s_[0] < self.STATE_LOW_BOUND] = self.STATE_LOW_BOUND
-        """得到阈值列表"""
         threshold = s_[0]
+        """限制阈值范围"""
+        threshold[threshold > self.STATE_HIGH_BOUND] = self.STATE_HIGH_BOUND
+        threshold[threshold < self.STATE_LOW_BOUND] = self.STATE_LOW_BOUND
         for i_ in range(len(self.FLAG_EMPTY)):
             threshold[self.FLAG_EMPTY[i_]] = self.FLAG_VALUE
         """处理音频"""

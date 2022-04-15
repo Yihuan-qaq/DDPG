@@ -3,6 +3,7 @@ import soundfile
 import librosa
 import numpy as np
 import ASR
+from jiwer import wer
 
 
 def low_filter(ft_matrix, threshold):
@@ -66,8 +67,8 @@ SOURCE_PATH_WAV = r'E:\PythonProject\timit\dr1-fvmh0\si836.wav'
 PHN = ['iy', 'ih', 'eh', 'ey', 'ae', 'aa', 'aw', 'ay', 'ah', 'ao', 'oy', 'ow', 'uh', 'uw',
        'ux', 'er', 'ax', 'ix', 'arx', 'ax-h']  # 20个元音音素
 n_fft = 512
-threshold = [0.30851, 0.26016, 0.50000, 0.50000, 0.50175, 0, 0.50000, 0, 0, 0.36941, 0.30960, 0.24261,
-             0, 0, 0, 0.43523, 0.50865, 0.21993, 0, 0.50000]
+threshold = [0, 9.94479015e-01, 9.72981551e-01, 1.09175770e+00, 0, 0, 8.18216950e-02, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 1.02495838e+00, 0, 2.65331928e-01]
 
 x, ft_abs, pha, sr = process_audio(SOURCE_PATH_WAV, n_fft=512)
 process_index_dict, FLAG_EMPTY = find_phon(SOURCE_PATH_PHN, PHN, hope_length=n_fft // 4, win_length=n_fft)
@@ -89,4 +90,8 @@ y_hat = librosa.istft(ft, n_fft=n_fft, hop_length=n_fft // 4, win_length=n_fft)
 temp_wirte_path = r'temp.wav'
 soundfile.write(temp_wirte_path, y_hat, samplerate=sr)
 trans_result = ASR.asr_api(temp_wirte_path, 'google')
+source_reslut = ASR.asr_api(SOURCE_PATH_WAV, 'google')
 print(trans_result)
+print('\n')
+print(wer(source_reslut, trans_result))
+print(process_index_dict)
