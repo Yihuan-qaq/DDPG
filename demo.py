@@ -24,6 +24,7 @@ def find_phon(source_path_phn, phon, hope_length, win_length):
     第n帧的pcm数据点范围 = [win_length * (n - 1) - hop_length, win_length * n - hop_length]
     :return: (pcm数据点)stft转换后帧的起始和截止的边界[strat,end]
     """
+    FLAG_EMPTY = []
     process_index_dict = dict([(p, []) for p in phon])
     '''加载并处理phn文件'''
     with open(source_path_phn) as f:
@@ -36,16 +37,17 @@ def find_phon(source_path_phn, phon, hope_length, win_length):
         for key in process_index_dict.keys():
             if phn_data[j][2] == key:
                 '''将pcm下表转换为帧的下标'''
-                phn_data[j][0] = (int(phn_data[j][0]) + hope_length) // win_length
-                phn_data[j][1] = (int(phn_data[j][1]) + hope_length) // win_length + 1
+                phn_data[j][0] = int(phn_data[j][0]) * 4 // win_length
+                phn_data[j][1] = int(phn_data[j][1]) * 4 // win_length + 1
                 """加入到字典中去"""
                 temp_list = [phn_data[j][0], phn_data[j][1]]
                 process_index_dict[key].append(temp_list)
-
-    # for i_ in range(0, len(process_index)):
-    #     process_index[i_][0] = (process_index[i_][0] + hope_length) // win_length
-    #     process_index[i_][1] = (process_index[i_][1] + hope_length) // win_length + 1
-    return process_index
+    """寻找没有出现的音素的位置"""
+    for key, i_ in zip(process_index_dict.keys(), range(len(process_index_dict))):
+        index_lists = process_index_dict[key]
+        if len(index_lists) == 0:
+            FLAG_EMPTY.append(i_)
+    return process_index_dict, FLAG_EMPTY
 
 
 def process_audio(source_path, n_fft):
@@ -56,23 +58,31 @@ def process_audio(source_path, n_fft):
     return x, ft_abs, pha, sr
 
 
-SOURCE_PATH_PHN = r'example\si836.phn'
-SOURCE_PATH_WAV = r'example\si836.wav'
+#
+
+
+SOURCE_PATH_PHN = r'E:\PythonProject\timit\dr1-fvmh0\si836.phn'
+SOURCE_PATH_WAV = r'E:\PythonProject\timit\dr1-fvmh0\si836.wav'
 PHN = ['iy', 'ih', 'eh', 'ey', 'ae', 'aa', 'aw', 'ay', 'ah', 'ao', 'oy', 'ow', 'uh', 'uw',
        'ux', 'er', 'ax', 'ix', 'arx', 'ax-h']  # 20个元音音素
 n_fft = 512
-threshold = [6.46225429, 6.18555432, 6.79467397, 6.64343743, 6.40981119, 6.73703657,
-             6.38226626, 6.33572403, 6.62456894, 6.69065477, 6.47778466, 6.63663315,
-             6.61620321, 6.64334202, 6.45145042, 6.48007743, 6.58611123, 6.2056657,
-             6.41311746, 6.45255511, 6.77838382]
+threshold = [0.30851, 0.26016, 0.50000, 0.50000, 0.50175, 0, 0.50000, 0, 0, 0.36941, 0.30960, 0.24261,
+             0, 0, 0, 0.43523, 0.50865, 0.21993, 0, 0.50000]
 
 x, ft_abs, pha, sr = process_audio(SOURCE_PATH_WAV, n_fft=512)
-process_index = find_phon(SOURCE_PATH_PHN, PHN, hope_length=n_fft // 4, win_length=n_fft)
-for i in range(0, len(process_index)):
-    strat_index = process_index[i][0]
-    end_index = process_index[i][1]
-    ft_abs[:, strat_index - 1:end_index - 1] = \
-        low_filter(ft_abs[:, strat_index - 1:end_index - 1], threshold[i])
+process_index_dict, FLAG_EMPTY = find_phon(SOURCE_PATH_PHN, PHN, hope_length=n_fft // 4, win_length=n_fft)
+
+for key, i in zip(process_index_dict.keys(), range(len(process_index_dict))):
+    index_lists = process_index_dict[key]
+    if len(index_lists) == 0:
+        continue
+    else:
+        for index in index_lists:
+            start_index = index[0]
+            end_index = index[1]
+            ft_abs[:, start_index - 1:end_index - 1] = \
+                low_filter(ft_abs[:, start_index - 1:end_index - 1], threshold[i])
+
 '''重建滤波后的音频'''
 ft = ft_abs * pha
 y_hat = librosa.istft(ft, n_fft=n_fft, hop_length=n_fft // 4, win_length=n_fft)
@@ -80,7 +90,3 @@ temp_wirte_path = r'temp.wav'
 soundfile.write(temp_wirte_path, y_hat, samplerate=sr)
 trans_result = ASR.asr_api(temp_wirte_path, 'google')
 print(trans_result)
-# ft_abs_filter = low_filter(ft_abs, threshold=0.5)
-# ft_filter = ft_abs_filter * pha
-# y_hat = librosa.istft(ft_filter)
-# print(calculate_MSE(x, y_hat))

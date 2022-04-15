@@ -65,8 +65,8 @@ class Env(object):
             for key in process_index_dict.keys():
                 if phn_data[j][2] == key:
                     '''将pcm下表转换为帧的下标'''
-                    phn_data[j][0] = (int(phn_data[j][0]) + self.hope_length) // self.win_length
-                    phn_data[j][1] = (int(phn_data[j][1]) + self.hope_length) // self.win_length + 1
+                    phn_data[j][0] = int(phn_data[j][0]) * 4 // self.win_length
+                    phn_data[j][1] = int(phn_data[j][1]) * 4 // self.win_length + 1
                     """加入到字典中去"""
                     temp_list = [phn_data[j][0], phn_data[j][1]]
                     process_index_dict[key].append(temp_list)
@@ -149,7 +149,7 @@ class Env(object):
         """计算总的reward"""
         # total_threshold =
         mean_threshold = np.sum(threshold_reward) / (len(threshold_reward) - len(self.FLAG_EMPTY))
-        r = wer_value * 100 - MSE_ratio * 90 - mean_threshold * 30
+        r = wer_value * 100 - MSE_ratio * 70 - mean_threshold * 60
         return r
 
     def step(self, s, a):
@@ -164,9 +164,9 @@ class Env(object):
         done = False
         r = 0
         s_ = s + a
-        # """限制阈值范围"""
-        # s_[0][s_[0] > self.STATE_HIGH_BOUND] = self.STATE_HIGH_BOUND
-        # s_[0][s_[0] < self.STATE_LOW_BOUND] = self.STATE_LOW_BOUND
+        """限制阈值范围"""
+        s_[0][s_[0] > self.STATE_HIGH_BOUND] = self.STATE_HIGH_BOUND
+        s_[0][s_[0] < self.STATE_LOW_BOUND] = self.STATE_LOW_BOUND
         """得到阈值列表"""
         threshold = s_[0]
         for i_ in range(len(self.FLAG_EMPTY)):

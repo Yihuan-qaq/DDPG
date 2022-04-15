@@ -48,11 +48,11 @@ LR_A = 0.001  # learning rate for actor
 LR_C = 0.002  # learning rate for critic
 GAMMA = 0.9  # reward discount
 TAU = 0.01  # soft replacement
-MEMORY_CAPACITY = 100  # size of replay buffer
-BATCH_SIZE = 16  # update batchsize
+MEMORY_CAPACITY = 200  # size of replay buffer
+BATCH_SIZE = 32  # update batchsize
 
-MAX_EPISODES = 20  # total number of episodes for training
-MAX_EP_STEPS = 100  # total number of steps for each episode
+MAX_EPISODES = 10  # total number of episodes for training
+MAX_EP_STEPS = 400  # total number of steps for each episode
 TEST_PER_EPISODES = 10  # test the model per episodes
 RELACE_ITER = 50
 VAR = 0.2  # control exploration
