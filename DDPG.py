@@ -48,8 +48,8 @@ LR_A = 0.001  # learning rate for actor
 LR_C = 0.002  # learning rate for critic
 GAMMA = 0.9  # reward discount
 TAU = 0.01  # soft replacement
-MEMORY_CAPACITY = 200  # size of replay buffer
-BATCH_SIZE = 32  # update batchsize
+MEMORY_CAPACITY = 100  # size of replay buffer
+BATCH_SIZE = 16  # update batchsize
 
 MAX_EPISODES = 20  # total number of episodes for training
 MAX_EP_STEPS = 100  # total number of steps for each episode
@@ -57,10 +57,10 @@ TEST_PER_EPISODES = 10  # test the model per episodes
 RELACE_ITER = 50
 VAR = 0.2  # control exploration
 
-# PHN = ['iy', 'ih', 'eh', 'ey', 'ae', 'aa', 'aw', 'ay', 'ah', 'ao', 'oy', 'ow', 'uh', 'uw',
-#        'ux', 'er', 'ax', 'ix', 'arx', 'ax-h']  # 20个元音音素
-PHN = ['jh', 'ch', 's', 'sh', 'z', 'zh', 'f', 'th', 'v', 'dh', 'b', 'd', 'g', 'p', 't', 'k',
-       'dx', 'q']  # 摩擦音/破擦音/爆破音
+PHN = ['iy', 'ih', 'eh', 'ey', 'ae', 'aa', 'aw', 'ay', 'ah', 'ao', 'oy', 'ow', 'uh', 'uw',
+       'ux', 'er', 'ax', 'ix', 'arx', 'ax-h']  # 20个元音音素
+# PHN = ['jh', 'ch', 's', 'sh', 'z', 'zh', 'f', 'th', 'v', 'dh', 'b', 'd', 'g', 'p', 't', 'k',
+#        'dx', 'q']  # 摩擦音/破擦音/爆破音
 SOURCE_PATH_PHN = r'example\si836.phn'
 SOURCE_PATH_WAV = r'example\si836.wav'
 
@@ -82,6 +82,15 @@ class DDPG(object):
         W_init = tf.random_normal_initializer(mean=0, stddev=0.3)
         b_init = tf.constant_initializer(0.1)
 
+        def tf_layer_normal(x):
+            x_mean = tf.reduce_mean(x, axis=-1)
+            x_mean = tf.expand_dims(x_mean, -1)
+
+            x_std = tf.math.reduce_std(x, axis=-1)
+            x_std = tf.expand_dims(x_std, -1)
+            x_normal = (x - x_mean) / x_std
+            return x_normal
+
         # 建立actor网络，输入s，输出a
         def get_actor(input_state_shape, name=''):
             """
@@ -92,6 +101,12 @@ class DDPG(object):
             """
             inputs = tl.layers.Input(input_state_shape, name='A_input')
             x = tl.layers.Dense(n_units=30, act=tf.nn.relu, W_init=W_init, b_init=b_init, name='A_l1')(inputs)
+            # x = tf_layer_normal(x)  # 增加LayerNorm层，以便数据分布于tanh激活函数范围区间内
+            # if name == '_target':
+            #     x = tl.layers.BatchNorm(name='A_norm')(x)
+            # else:
+            #     x = tl.layers.LayerNorm(name='A_norm')(x)
+            x = tl.layers.BatchNorm(num_features=30, name='A_norm')(x)
             x = tl.layers.Dense(n_units=a_dim, act=tf.nn.tanh, W_init=W_init, b_init=b_init, name='A_a')(x)
             x = tl.layers.Lambda(lambda x: np.array(a_bound) * x)(x)  # 注意这里，先用tanh把范围限定在[-1,1]之间，再进行映射
             return tl.models.Model(inputs=inputs, outputs=x, name='Actor' + name)
@@ -164,7 +179,7 @@ class DDPG(object):
         :param s: state
         :return: act
         """
-        x = np.array([s], dtype=np.float32)
+        x = np.array([s], dtype=np.float32)[0]
         act = self.actor(x)[0]
         return act
 
@@ -188,7 +203,7 @@ class DDPG(object):
             q_ = self.critic_target([bs_, a_])
             y = br + GAMMA * q_
             q = self.critic([bs, ba])
-            td_error = tf.losses.mean_squared_error(y, q)
+            td_error = tf.losses.mean_squared_error(y, q)  # 如果TD-Error很小，说明Critic网络学习好了，然后才开始正确训练Actor
         c_grads = tape.gradient(td_error, self.critic.trainable_weights)
         self.critic_opt.apply_gradients(zip(c_grads, self.critic.trainable_weights))
 
@@ -204,6 +219,7 @@ class DDPG(object):
         if (self.pointer + 1) % RELACE_ITER == 0:
             print('\nParas Update')
             self.ema_update()
+        return np.mean(td_error.numpy())
 
     # 保存s，a，r，s_
     def store_transition(self, s, a, r, s_):
@@ -288,12 +304,14 @@ if __name__ == '__main__':
         for i in range(MAX_EPISODES):
             t1 = time.time()
             s = env.reset()
-            ep_reward = 0  # 记录当前EP的reward
+            ep_reward = []  # 记录当前EP的reward
+            TD_ERROR = []  # 记录当前EP的TD_ERROR
             asr_time = 0  # 记录当前EPASR消耗的时间
             avg_S = 0
             for j in range(MAX_EP_STEPS):
                 # Add exploration noise
                 a = ddpg.choose_action(s).numpy()
+                a = np.array([a], dtype=np.float32)
                 # 这里很简单，直接用actor估算出a动作
 
                 # 为了能保持开发，这里用了另外一种方式增加探索。
@@ -302,18 +320,20 @@ if __name__ == '__main__':
                 # 然后进行裁剪
                 # 如果返回的r小于最好的r，那么：大阈值变小一点，小阈值变大一点
 
-                if r < r_max and ddpg.pointer > MEMORY_CAPACITY:
-                    for dim in range(0, len(s[0])):
-                        if s[0][dim] >= 1:
-                            a[0][dim] = -np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1))
-                        else:
-                            a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1)
-                else:
-                    for dim in range(0, len(s[0])):
-                        if s[0][dim] <= 0:
-                            a[0][dim] = np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1))
-                        else:
-                            a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1)
+                # if r < r_max and ddpg.pointer > MEMORY_CAPACITY:
+                #     for dim in range(0, len(s[0])):
+                #         if s[0][dim] >= 1:
+                #             a[0][dim] = -np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1))
+                #         else:
+                #             a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1)
+                # else:
+                #     for dim in range(0, len(s[0])):
+                #         if s[0][dim] <= 0:
+                #             a[0][dim] = np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1))
+                #         else:
+                #             a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1)
+
+                a = np.clip(np.random.normal(a, VAR), -0.1, 0.1)
                 # 与环境进行互动
                 s_, r, done, temp_asr_time = env.step(s, a)
                 asr_time += temp_asr_time
@@ -322,9 +342,10 @@ if __name__ == '__main__':
                 # ddpg.store_transition(s, a, r, s_)
 
                 # 第一次数据满了，就可以开始学习
-                if ddpg.pointer > MEMORY_CAPACITY and (ddpg.pointer + 1) % 5 == 0:
+                if ddpg.pointer > MEMORY_CAPACITY and (ddpg.pointer + 1) % 2 == 0:
                     # print('----learn----')
-                    ddpg.learn()
+                    td_error = ddpg.learn()
+                    TD_ERROR.append(td_error)
 
                 # 输出数据记录
                 s = s_
@@ -336,13 +357,26 @@ if __name__ == '__main__':
                     print('\n temp_record_done_s', r_max_record)
                     print('\n temp_record_epoch:', epoch_record)
                 avg_S += s[0]
-                ep_reward += r  # 记录当前EP的总reward
+                ep_reward.append(r)  # 记录当前EP的总reward
                 if j == MAX_EP_STEPS - 1:
-                    total_reward.append(ep_reward)
+                    total_reward.append(np.sum(ep_reward))
+                    plt.figure()
+                    plt.title('EP-Reward,epoch_{}'.format(i))
+                    plt.xlabel('steps')
+                    plt.ylabel('reward value')
+                    plt.plot(np.array(range(len(ep_reward))), ep_reward)
+                    plt.show()
+                    if ddpg.pointer > MEMORY_CAPACITY:
+                        plt.figure()
+                        plt.title('EP-TD_ERROR,epoch_{}'.format(i))
+                        plt.xlabel('steps')
+                        plt.ylabel('td_error value')
+                        plt.plot(np.array(range(len(TD_ERROR))), TD_ERROR)
+                        plt.show()
                     print(
                         '\rEpisode: {}/{}  | Episode Reward: {:.4f}  | ASR Time: {:.4f} | AVG Threshold: {} '
                         '| Running Time: {:.4f}'.format(
-                            i + 1, MAX_EPISODES, ep_reward,
+                            i + 1, MAX_EPISODES, np.sum(ep_reward),
                             asr_time,
                             avg_S / MAX_EP_STEPS,
                             time.time() - t1

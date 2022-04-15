@@ -30,6 +30,8 @@ class Env(object):
 
         self.bound_high = 0.2
         self.bound_low = -0.2
+        self.STATE_HIGH_BOUND = 2
+        self.STATE_LOW_BOUND = 0.2
         self.process_index = self.find_phon()
         self.s_dim = len(self.process_index)
         self.a_dim = self.s_dim
@@ -100,7 +102,20 @@ class Env(object):
         average_change = overall_change / len(audio1)
         return average_change
 
-    def calculate_reward(self, source_result, processed_result, source_path, phn_hat, threshold):
+    def calculate_reward(self, source_result, processed_result, source_path, phn_hat, threshold, s, a):
+        """ 对那些超出阈值范围的状态进行大力度惩罚 """
+        s = s[0]
+        a = a[0]
+        threshold_reward = np.zeros(shape=(len(s)), dtype=float)
+        for i in range(len(s)):
+            if s[i] <= self.STATE_LOW_BOUND and a[i] <= 0:
+                threshold_reward[i] = np.abs(threshold[i]) * 50
+            elif s[i] >= self.STATE_LOW_BOUND and a[i] >= 0:
+                threshold_reward[i] = threshold[i] * 5
+            else:
+                threshold_reward[i] = threshold[i]
+
+        """ 计算MSE分数"""
         if source_result == "RequestError":
             r = 0
             return r
@@ -118,12 +133,14 @@ class Env(object):
         MSE2 = self.calculate_MSE(source_hat, global_ft_hat)
 
         if MSE2 == 0.0:
-            return 0
+            return -100
         else:
             MSE_ratio = MSE1 / MSE2
-            mean_threshold = np.mean(threshold)
-            r = wer_value * 100 - MSE_ratio * 90 - mean_threshold * 40  # 5太小10太大
-            return r
+
+        """计算总的reward"""
+        mean_threshold = np.mean(threshold_reward)
+        r = wer_value * 100 - MSE_ratio * 90 - mean_threshold * 40
+        return r
 
     def step(self, s, a):
         """
@@ -136,12 +153,10 @@ class Env(object):
         """
         done = False
         r = 0
-        STATE_HIGH_BOUND = 2
-        STATE_LOW_BOUND = 0.2
-
         s_ = s + a
-        s_[0][s_[0] > STATE_HIGH_BOUND] = np.random.uniform(0, 1)  # 限制阈值最大为10
-        s_[0][s_[0] < STATE_LOW_BOUND] = np.random.uniform(0, 1) * STATE_LOW_BOUND
+        """限制阈值范围"""
+        s_[0][s_[0] > self.STATE_HIGH_BOUND] = self.STATE_HIGH_BOUND
+        s_[0][s_[0] < self.STATE_LOW_BOUND] = self.STATE_LOW_BOUND
         threshold = s_[0]
         ft_abs, pha, sr = self.process_audio(self.source_path_wav)
         process_index = self.process_index
@@ -160,19 +175,7 @@ class Env(object):
         trans_result = ASR.asr_api(temp_wirte_path, 'google')
         t1 = time.time()
         r = self.calculate_reward(self.source_result, trans_result, self.source_path_wav, phn_hat=y_hat,
-                                  threshold=threshold)
-        # wer_result = wer(trans_result, self.source_result)
-        # if trans_result != self.source_result:
-        #     done = True
-        #     r = 1
-        # if 0 < wer_result <= 0.1:
-        #     r = 0.3
-        # if 0.1 < wer_result <= 0.2:
-        #     r = 0.6
-        # if 0.2 < wer_result <= 0.3:
-        #     print(wer_result)
-        #     r = 1
-        #     done = True
+                                  threshold=threshold, s=s, a=a)
         return s_, r, done, t1 - t0
 
     def reset(self):
