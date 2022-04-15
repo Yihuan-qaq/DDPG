@@ -28,12 +28,14 @@ class Env(object):
         self.win_length = self.n_fft
         self.hope_length = self.win_length // 4
 
+        self.FLAG_EMPTY = []  # 记录没有出现的音素位置
+        self.FLAG_VALUE = -100  # 标记音素没有出现位置的值
         self.bound_high = 0.2
         self.bound_low = -0.2
         self.STATE_HIGH_BOUND = 2
-        self.STATE_LOW_BOUND = 0.2
-        self.process_index = self.find_phon()
-        self.s_dim = len(self.process_index)
+        self.STATE_LOW_BOUND = 0.1
+        self.process_index_dict = self.find_phon()
+        self.s_dim = len(self.process_index_dict)
         self.a_dim = self.s_dim
 
     def process_audio(self, source_path):
@@ -51,7 +53,7 @@ class Env(object):
         :return: (pcm数据点)stft转换后帧的起始和截止的边界[strat,end]
         """
         EXPEND_FRAME = 2  # 扩展下帧数
-        process_index = []
+        process_index_dict = dict([(p, []) for p in self.phon])
         '''加载并处理phn文件'''
         with open(self.source_path_phn) as f:
             phn_data = f.readlines()
@@ -60,15 +62,20 @@ class Env(object):
                 phn_data[i] = phn_data[i].split()
         '''找到想要处理的phn对应的pcm数据下表'''
         for j in range(0, len(phn_data)):
-            for i in range(0, len(self.phon)):
-                if phn_data[j][2] == self.phon[i]:
-                    temp_list = [int(phn_data[j][0]), int(phn_data[j][1])]
-                    process_index.append(temp_list)
-        '''将pcm下表转换为帧的下标'''
-        for i_ in range(0, len(process_index)):
-            process_index[i_][0] = process_index[i_][0] * 4 // self.win_length
-            process_index[i_][1] = process_index[i_][1] * 4 // self.win_length + 1
-        return process_index
+            for key in process_index_dict.keys():
+                if phn_data[j][2] == key:
+                    '''将pcm下表转换为帧的下标'''
+                    phn_data[j][0] = (int(phn_data[j][0]) + self.hope_length) // self.win_length
+                    phn_data[j][1] = (int(phn_data[j][1]) + self.hope_length) // self.win_length + 1
+                    """加入到字典中去"""
+                    temp_list = [phn_data[j][0], phn_data[j][1]]
+                    process_index_dict[key].append(temp_list)
+        """寻找没有出现的音素的位置"""
+        for key, i_ in zip(process_index_dict.keys(), range(len(process_index_dict))):
+            index_lists = process_index_dict[key]
+            if len(index_lists) == 0:
+                self.FLAG_EMPTY.append(i_)
+        return process_index_dict
 
     def low_filter(self, ft_matrix, threshold):
         ft_filter = np.zeros(shape=(len(ft_matrix), len(ft_matrix[0])), dtype=float)
@@ -108,9 +115,11 @@ class Env(object):
         a = a[0]
         threshold_reward = np.zeros(shape=(len(s)), dtype=float)
         for i in range(len(s)):
-            if s[i] <= self.STATE_LOW_BOUND and a[i] <= 0:
+            if threshold[i] == self.FLAG_VALUE:
+                threshold_reward[i] = 0
+            elif s[i] <= self.STATE_LOW_BOUND and a[i] <= 0:
                 threshold_reward[i] = np.abs(threshold[i]) * 50
-            elif s[i] >= self.STATE_LOW_BOUND and a[i] >= 0:
+            elif s[i] >= self.STATE_HIGH_BOUND and a[i] >= 0:
                 threshold_reward[i] = threshold[i] * 5
             else:
                 threshold_reward[i] = threshold[i]
@@ -123,7 +132,7 @@ class Env(object):
             wer_value = wer(source_result, processed_result)
 
         global_ft_abs, source_pha, sr = self.process_audio(source_path)
-        global_ft_abs_filter = self.low_filter(global_ft_abs, max(threshold))
+        global_ft_abs_filter = self.low_filter(global_ft_abs, max(threshold_reward))
         global_ft = global_ft_abs_filter * source_pha
         global_ft_hat = librosa.istft(global_ft, n_fft=self.n_fft, hop_length=self.hope_length, win_length=self.win_length)
 
@@ -138,8 +147,9 @@ class Env(object):
             MSE_ratio = MSE1 / MSE2
 
         """计算总的reward"""
-        mean_threshold = np.mean(threshold_reward)
-        r = wer_value * 100 - MSE_ratio * 90 - mean_threshold * 40
+        # total_threshold =
+        mean_threshold = np.sum(threshold_reward) / (len(threshold_reward) - len(self.FLAG_EMPTY))
+        r = wer_value * 100 - MSE_ratio * 90 - mean_threshold * 30
         return r
 
     def step(self, s, a):
@@ -154,18 +164,27 @@ class Env(object):
         done = False
         r = 0
         s_ = s + a
-        """限制阈值范围"""
-        s_[0][s_[0] > self.STATE_HIGH_BOUND] = self.STATE_HIGH_BOUND
-        s_[0][s_[0] < self.STATE_LOW_BOUND] = self.STATE_LOW_BOUND
+        # """限制阈值范围"""
+        # s_[0][s_[0] > self.STATE_HIGH_BOUND] = self.STATE_HIGH_BOUND
+        # s_[0][s_[0] < self.STATE_LOW_BOUND] = self.STATE_LOW_BOUND
+        """得到阈值列表"""
         threshold = s_[0]
+        for i_ in range(len(self.FLAG_EMPTY)):
+            threshold[self.FLAG_EMPTY[i_]] = self.FLAG_VALUE
+        """处理音频"""
         ft_abs, pha, sr = self.process_audio(self.source_path_wav)
-        process_index = self.process_index
+        process_index_dict = self.process_index_dict
         '''滤波'''
-        for i in range(0, len(process_index)):
-            strat_index = process_index[i][0]
-            end_index = process_index[i][1]
-            ft_abs[:, strat_index - 1:end_index - 1] = \
-                self.low_filter(ft_abs[:, strat_index - 1:end_index - 1], threshold[i])
+        for key, i in zip(process_index_dict.keys(), range(len(process_index_dict))):
+            index_lists = process_index_dict[key]
+            if len(index_lists) == 0:
+                continue
+            else:
+                for index in index_lists:
+                    start_index = index[0]
+                    end_index = index[1]
+                    ft_abs[:, start_index - 1:end_index - 1] = \
+                        self.low_filter(ft_abs[:, start_index - 1:end_index - 1], threshold[i])
         '''重建滤波后的音频'''
         ft = ft_abs * pha
         y_hat = librosa.istft(ft, n_fft=self.n_fft, hop_length=self.hope_length, win_length=self.win_length)
@@ -198,3 +217,6 @@ class Env(object):
 
     def get_a_dim(self):
         return self.a_dim
+
+    def get_FLAG_EMPTY(self):
+        return self.FLAG_EMPTY

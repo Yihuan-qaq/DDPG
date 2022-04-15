@@ -275,6 +275,7 @@ if __name__ == '__main__':
     # sys.stdout = Logger(sys.stdout)
     # 初始化环境
     env = Env(PHN, SOURCE_PATH_WAV, SOURCE_PATH_PHN)
+    FLAG_EMPTY = env.get_FLAG_EMPTY()
 
     # reproducible，设置随机种子，为了能够重现
     np.random.seed(RANDOMSEED)
@@ -306,7 +307,7 @@ if __name__ == '__main__':
             s = env.reset()
             ep_reward = []  # 记录当前EP的reward
             TD_ERROR = []  # 记录当前EP的TD_ERROR
-            asr_time = 0  # 记录当前EPASR消耗的时间
+            asr_time = 0  # 记录当前EP的ASR消耗的时间
             avg_S = 0
             for j in range(MAX_EP_STEPS):
                 # Add exploration noise
@@ -320,20 +321,20 @@ if __name__ == '__main__':
                 # 然后进行裁剪
                 # 如果返回的r小于最好的r，那么：大阈值变小一点，小阈值变大一点
 
-                # if r < r_max and ddpg.pointer > MEMORY_CAPACITY:
-                #     for dim in range(0, len(s[0])):
-                #         if s[0][dim] >= 1:
-                #             a[0][dim] = -np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1))
-                #         else:
-                #             a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1)
-                # else:
-                #     for dim in range(0, len(s[0])):
-                #         if s[0][dim] <= 0:
-                #             a[0][dim] = np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1))
-                #         else:
-                #             a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1)
+                if r < r_max and ddpg.pointer > MEMORY_CAPACITY:
+                    for dim in range(0, len(s[0])):
+                        if s[0][dim] >= 1:
+                            a[0][dim] = -np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1))
+                        else:
+                            a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1)
+                else:
+                    for dim in range(0, len(s[0])):
+                        if s[0][dim] <= 0:
+                            a[0][dim] = np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1))
+                        else:
+                            a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1)
 
-                a = np.clip(np.random.normal(a, VAR), -0.1, 0.1)
+                # a = np.clip(np.random.normal(a, VAR), -0.1, 0.1)
                 # 与环境进行互动
                 s_, r, done, temp_asr_time = env.step(s, a)
                 asr_time += temp_asr_time
@@ -359,6 +360,7 @@ if __name__ == '__main__':
                 avg_S += s[0]
                 ep_reward.append(r)  # 记录当前EP的总reward
                 if j == MAX_EP_STEPS - 1:
+                    """记录reward"""
                     total_reward.append(np.sum(ep_reward))
                     plt.figure()
                     plt.title('EP-Reward,epoch_{}'.format(i))
@@ -366,6 +368,7 @@ if __name__ == '__main__':
                     plt.ylabel('reward value')
                     plt.plot(np.array(range(len(ep_reward))), ep_reward)
                     plt.show()
+                    """记录TD ERROR"""
                     if ddpg.pointer > MEMORY_CAPACITY:
                         plt.figure()
                         plt.title('EP-TD_ERROR,epoch_{}'.format(i))
