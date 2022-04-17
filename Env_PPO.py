@@ -7,7 +7,7 @@ from jiwer import wer
 import time
 
 
-class Env(object):
+class Env_PPO(object):
 
     def __init__(self, phon, source_path_wav, source_path_phn):
         self.phon = phon
@@ -112,19 +112,19 @@ class Env(object):
 
     def calculate_reward(self, source_result, processed_result, source_path, phn_hat, threshold, s, a):
         """ 对那些超出阈值范围的状态进行大力度惩罚 """
-        s = s[0]
-        a = a[0]
+        # s = s[0]
+        # a = a[0]
         threshold_reward = np.zeros(shape=(len(s)), dtype=np.float64)
         for i in range(len(s)):
             if threshold[i] == self.FLAG_VALUE:
                 threshold_reward[i] = 0
             elif s[i] <= self.STATE_LOW_BOUND:
                 if a[i] <= 0:
-                    threshold_reward[i] = np.abs(threshold[i]) * 50
+                    threshold_reward[i] = np.abs(s[i]) * 10
                 else:
-                    threshold_reward[i] = np.abs(threshold[i]) * 10
+                    threshold_reward[i] = np.abs(s[i]) * 5
             elif s[i] >= self.STATE_HIGH_BOUND and a[i] >= 0:
-                threshold_reward[i] = threshold[i] * 5
+                threshold_reward[i] = s[i] * 5
             else:
                 threshold_reward[i] = threshold[i]
 
@@ -157,19 +157,21 @@ class Env(object):
         r = wer_value * 100 - MSE_ratio * 70 - mean_threshold * 60
         return r
 
-    def step(self, s, a):
+    def step(self, s, a, wid):
         """
         :input: 动作a
         计算当前状态s加上动作a后的下一状态s_;
         用这个s_进行一次滤波，并转录结果，判断是否攻击成功;
         攻击成功：奖励r=1，结束标志done=True；
         攻击成功：奖励r=0，结束标志done=Flase；
+        wid: 多线程中的线程编号，用于防止文件读取重复
         :return: s_,r,done;
         """
         done = False
         r = 0
         s_ = s + a
-        threshold = s_[0]
+        # threshold = s_[0]  #  DDPG
+        threshold = s_
         """限制阈值范围"""
         threshold[threshold > self.STATE_HIGH_BOUND] = self.STATE_HIGH_BOUND
         threshold[threshold < self.STATE_LOW_BOUND] = self.STATE_LOW_BOUND
@@ -192,7 +194,7 @@ class Env(object):
         '''重建滤波后的音频'''
         ft = ft_abs * pha
         y_hat = librosa.istft(ft, n_fft=self.n_fft, hop_length=self.hope_length, win_length=self.win_length)
-        temp_wirte_path = r'temp.wav'
+        temp_wirte_path = r'temp_{}.wav'.format(wid)
         soundfile.write(temp_wirte_path, y_hat, samplerate=sr)
         t0 = time.time()
         trans_result = ASR.asr_api(temp_wirte_path, 'google')
@@ -212,7 +214,8 @@ class Env(object):
         """
         Max = 0.5  # 随机生成小数的最大值
         s = np.random.rand(self.s_dim) * Max
-        return np.array([s], dtype=float)
+        # return np.array([s], dtype=float) # DDPG
+        return np.array(s, dtype=np.float64)
 
     def action_space_high(self):
         return self.bound_high

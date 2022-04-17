@@ -4,6 +4,7 @@ from scipy.io import wavfile
 import deepspeech
 import asr_xunfei
 import json
+from http.client import IncompleteRead
 
 
 def asr_api(path, api):
@@ -15,10 +16,14 @@ def asr_api(path, api):
         try:
             return r.recognize_google(audio)
         except sr.UnknownValueError:
+            # print("Transcirbe error")
             return "Transcirbe error"
         except sr.RequestError as err:
             print("Google error; {0}".format(err))
             return "RequestError"
+        except IncompleteRead:
+            print("IncompletedRead")
+            return "IncompletedRead"
 
     if api == 'deepspeech':
         fs, data = wavfile.read(path)

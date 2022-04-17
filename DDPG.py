@@ -48,13 +48,13 @@ LR_A = 0.001  # learning rate for actor
 LR_C = 0.002  # learning rate for critic
 GAMMA = 0.9  # reward discount
 TAU = 0.01  # soft replacement
-MEMORY_CAPACITY = 200  # size of replay buffer
-BATCH_SIZE = 32  # update batchsize
+MEMORY_CAPACITY = 500  # size of replay buffer
+BATCH_SIZE = 8  # update batchsize
 
-MAX_EPISODES = 10  # total number of episodes for training
-MAX_EP_STEPS = 400  # total number of steps for each episode
+MAX_EPISODES = 20  # total number of episodes for training
+MAX_EP_STEPS = 100  # total number of steps for each episode
 TEST_PER_EPISODES = 10  # test the model per episodes
-RELACE_ITER = 50
+RELACE_ITER = 400
 VAR = 0.2  # control exploration
 
 PHN = ['iy', 'ih', 'eh', 'ey', 'ae', 'aa', 'aw', 'ay', 'ah', 'ao', 'oy', 'ow', 'uh', 'uw',
@@ -367,6 +367,7 @@ if __name__ == '__main__':
                     plt.xlabel('steps')
                     plt.ylabel('reward value')
                     plt.plot(np.array(range(len(ep_reward))), ep_reward)
+                    plt.savefig(r'figure/reward_{}'.format(i))
                     plt.show()
                     """记录TD ERROR"""
                     if ddpg.pointer > MEMORY_CAPACITY:
@@ -375,6 +376,7 @@ if __name__ == '__main__':
                         plt.xlabel('steps')
                         plt.ylabel('td_error value')
                         plt.plot(np.array(range(len(TD_ERROR))), TD_ERROR)
+                        plt.savefig(r'figure/TD-Error_{}'.format(i))
                         plt.show()
                     print(
                         '\rEpisode: {}/{}  | Episode Reward: {:.4f}  | ASR Time: {:.4f} | AVG Threshold: {} '
@@ -430,6 +432,7 @@ if __name__ == '__main__':
         #         plt.pause(0.1)
         # plt.ioff()
         # plt.show()
+        print('\nInvaild Sample Counter:{}'.format(env.get_TRANSERROR()))
         print('\nRunning time: ', time.time() - t0)
 
         ddpg.save_ckpt()
