@@ -1,3 +1,4 @@
+import soundfile
 import speech_recognition as sr
 from scipy.io import wavfile
 # from deepspeech import Model
@@ -27,8 +28,9 @@ def asr_api(path, api):
 
     if api == 'deepspeech':
         fs, data = wavfile.read(path)
-        model_path = r'D:\output_graph.pb'  # 已下载的模型地址（正确的模型文件中有以.pb结尾的文件）
-        ars = deepspeech.Model(model_path, 1024)
+        # data, fs = soundfile.read(path)
+        model_path = r'D:\deepspeech-0.9.3-models.pbmm'  # 已下载的模型地址（正确的模型文件中有以.pb结尾的文件）
+        ars = deepspeech.Model(model_path)
         translate_txt = ars.stt(data)
         return translate_txt
 

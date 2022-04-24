@@ -36,8 +36,8 @@ PHN = ['iy', 'ih', 'eh', 'ey', 'ae', 'aa', 'aw', 'ay', 'ah', 'ao', 'oy', 'ow', '
        'ux', 'er', 'ax', 'ix', 'arx', 'ax-h']  # 20个元音音素
 # PHN = ['jh', 'ch', 's', 'sh', 'z', 'zh', 'f', 'th', 'v', 'dh', 'b', 'd', 'g', 'p', 't', 'k',
 #        'dx', 'q']  # 摩擦音/破擦音/爆破音
-SOURCE_PATH_PHN = r'example\si836.phn'
-SOURCE_PATH_WAV = r'example\si836.wav'
+SOURCE_PATH_PHN = r'../example/si836.phn'
+SOURCE_PATH_WAV = r'../example/si836.wav'
 
 env = Env_PPO(PHN, SOURCE_PATH_WAV, SOURCE_PATH_PHN)
 S_DIM = env.get_s_dim()

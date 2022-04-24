@@ -48,21 +48,21 @@ LR_A = 0.001  # learning rate for actor
 LR_C = 0.002  # learning rate for critic
 GAMMA = 0.9  # reward discount
 TAU = 0.01  # soft replacement
-MEMORY_CAPACITY = 500  # size of replay buffer
-BATCH_SIZE = 8  # update batchsize
+MEMORY_CAPACITY = 200  # size of replay buffer
+BATCH_SIZE = 16  # update batchsize
 
 MAX_EPISODES = 20  # total number of episodes for training
 MAX_EP_STEPS = 100  # total number of steps for each episode
 TEST_PER_EPISODES = 10  # test the model per episodes
-RELACE_ITER = 400
+RELACE_ITER = 100
 VAR = 0.2  # control exploration
 
 PHN = ['iy', 'ih', 'eh', 'ey', 'ae', 'aa', 'aw', 'ay', 'ah', 'ao', 'oy', 'ow', 'uh', 'uw',
        'ux', 'er', 'ax', 'ix', 'arx', 'ax-h']  # 20个元音音素
 # PHN = ['jh', 'ch', 's', 'sh', 'z', 'zh', 'f', 'th', 'v', 'dh', 'b', 'd', 'g', 'p', 't', 'k',
 #        'dx', 'q']  # 摩擦音/破擦音/爆破音
-SOURCE_PATH_PHN = r'example\si836.phn'
-SOURCE_PATH_WAV = r'example\si836.wav'
+SOURCE_PATH_PHN = r'../example/si836.phn'
+SOURCE_PATH_WAV = r'../example/si836.wav'
 
 
 ###############################  DDPG  ####################################
@@ -82,15 +82,6 @@ class DDPG(object):
         W_init = tf.random_normal_initializer(mean=0, stddev=0.3)
         b_init = tf.constant_initializer(0.1)
 
-        def tf_layer_normal(x):
-            x_mean = tf.reduce_mean(x, axis=-1)
-            x_mean = tf.expand_dims(x_mean, -1)
-
-            x_std = tf.math.reduce_std(x, axis=-1)
-            x_std = tf.expand_dims(x_std, -1)
-            x_normal = (x - x_mean) / x_std
-            return x_normal
-
         # 建立actor网络，输入s，输出a
         def get_actor(input_state_shape, name=''):
             """
@@ -100,14 +91,15 @@ class DDPG(object):
             :return: act
             """
             inputs = tl.layers.Input(input_state_shape, name='A_input')
-            x = tl.layers.Dense(n_units=30, act=tf.nn.relu, W_init=W_init, b_init=b_init, name='A_l1')(inputs)
+            x = tl.layers.Dense(n_units=100, act=tf.nn.relu, W_init=W_init, b_init=b_init, name='A_l1')(inputs)
             # x = tf_layer_normal(x)  # 增加LayerNorm层，以便数据分布于tanh激活函数范围区间内
             # if name == '_target':
             #     x = tl.layers.BatchNorm(name='A_norm')(x)
             # else:
             #     x = tl.layers.LayerNorm(name='A_norm')(x)
-            x = tl.layers.BatchNorm(num_features=30, name='A_norm')(x)
-            x = tl.layers.Dense(n_units=a_dim, act=tf.nn.tanh, W_init=W_init, b_init=b_init, name='A_a')(x)
+            x = tl.layers.BatchNorm(num_features=100, name='A_norm')(x)
+            # x = tl.layers.Dense(n_units=a_dim, act=tf.nn.tanh, W_init=W_init, b_init=b_init, name='A_a1')(x)
+            x = tl.layers.Dense(n_units=a_dim, act=tf.nn.tanh, W_init=W_init, b_init=b_init, name='A_a2')(x)
             x = tl.layers.Lambda(lambda x: np.array(a_bound) * x)(x)  # 注意这里，先用tanh把范围限定在[-1,1]之间，再进行映射
             return tl.models.Model(inputs=inputs, outputs=x, name='Actor' + name)
 
@@ -251,23 +243,23 @@ class DDPG(object):
         save trained weights
         :return: None
         """
-        if not os.path.exists('model'):
-            os.makedirs('model')
+        if not os.path.exists('../model'):
+            os.makedirs('../model')
 
-        tl.files.save_weights_to_hdf5('model/ddpg_actor.hdf5', self.actor)
-        tl.files.save_weights_to_hdf5('model/ddpg_actor_target.hdf5', self.actor_target)
-        tl.files.save_weights_to_hdf5('model/ddpg_critic.hdf5', self.critic)
-        tl.files.save_weights_to_hdf5('model/ddpg_critic_target.hdf5', self.critic_target)
+        tl.files.save_weights_to_hdf5('../model/ddpg_actor.hdf5', self.actor)
+        tl.files.save_weights_to_hdf5('../model/ddpg_actor_target.hdf5', self.actor_target)
+        tl.files.save_weights_to_hdf5('../model/ddpg_critic.hdf5', self.critic)
+        tl.files.save_weights_to_hdf5('../model/ddpg_critic_target.hdf5', self.critic_target)
 
     def load_ckpt(self):
         """
         load trained weights
         :return: None
         """
-        tl.files.load_hdf5_to_weights_in_order('model/ddpg_actor.hdf5', self.actor)
-        tl.files.load_hdf5_to_weights_in_order('model/ddpg_actor_target.hdf5', self.actor_target)
-        tl.files.load_hdf5_to_weights_in_order('model/ddpg_critic.hdf5', self.critic)
-        tl.files.load_hdf5_to_weights_in_order('model/ddpg_critic_target.hdf5', self.critic_target)
+        tl.files.load_hdf5_to_weights_in_order('../model/ddpg_actor.hdf5', self.actor)
+        tl.files.load_hdf5_to_weights_in_order('../model/ddpg_actor_target.hdf5', self.actor_target)
+        tl.files.load_hdf5_to_weights_in_order('../model/ddpg_critic.hdf5', self.critic)
+        tl.files.load_hdf5_to_weights_in_order('../model/ddpg_critic_target.hdf5', self.critic_target)
 
 
 if __name__ == '__main__':
@@ -302,6 +294,8 @@ if __name__ == '__main__':
         r_max = 0.0
         r = -10000.0
         total_reward = []
+        total_AVG_threshold = []
+        total_TD_error = []
         for i in range(MAX_EPISODES):
             t1 = time.time()
             s = env.reset()
@@ -323,7 +317,7 @@ if __name__ == '__main__':
 
                 if r < r_max and ddpg.pointer > MEMORY_CAPACITY:
                     for dim in range(0, len(s[0])):
-                        if s[0][dim] >= 1:
+                        if s[0][dim] >= 1.5:
                             a[0][dim] = -np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1))
                         else:
                             a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1)
@@ -367,17 +361,20 @@ if __name__ == '__main__':
                     plt.xlabel('steps')
                     plt.ylabel('reward value')
                     plt.plot(np.array(range(len(ep_reward))), ep_reward)
-                    plt.savefig(r'figure/reward_{}'.format(i))
+                    plt.savefig(r'..\figure\reward_{}'.format(i))
                     plt.show()
                     """记录TD ERROR"""
                     if ddpg.pointer > MEMORY_CAPACITY:
+                        total_TD_error.append(TD_ERROR)
                         plt.figure()
                         plt.title('EP-TD_ERROR,epoch_{}'.format(i))
                         plt.xlabel('steps')
                         plt.ylabel('td_error value')
                         plt.plot(np.array(range(len(TD_ERROR))), TD_ERROR)
-                        plt.savefig(r'figure/TD-Error_{}'.format(i))
+                        plt.savefig(r'..\figure\TD-Error_{}'.format(i))
                         plt.show()
+                    """记录阈值变化"""
+                    total_AVG_threshold.append(avg_S / MAX_EP_STEPS)
                     print(
                         '\rEpisode: {}/{}  | Episode Reward: {:.4f}  | ASR Time: {:.4f} | AVG Threshold: {} '
                         '| Running Time: {:.4f}'.format(
@@ -434,6 +431,10 @@ if __name__ == '__main__':
         # plt.show()
         print('\nInvaild Sample Counter:{}'.format(env.get_TRANSERROR()))
         print('\nRunning time: ', time.time() - t0)
+
+        np.save(r'../result/TD_ERROR.npy', total_TD_error)
+        np.save(r'../result/Reward.npy', total_reward)
+        np.save(r'../result/AVG.npy', total_AVG_threshold)
 
         ddpg.save_ckpt()
 
