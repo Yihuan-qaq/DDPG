@@ -1,4 +1,3 @@
-import numpy as np
 import soundfile
 import librosa
 import numpy as np
@@ -16,7 +15,7 @@ class Env(object):
 
         flag = 0
         if flag == 0:
-            self.source_result = ASR.asr_api(self.source_path_wav, 'deepspeech')
+            self.source_result = ASR.asr_api(self.source_path_wav, 'google')
             self.temp_source_result = self.source_result
             flag = 1
             print("----source result :{}".format(self.source_result))
@@ -30,10 +29,9 @@ class Env(object):
 
         self.FLAG_EMPTY = []  # 记录没有出现的音素位置
         self.FLAG_VALUE = -100  # 标记音素没有出现位置的值
-        self.TRANSERROR_COUTER = 0
-        self.bound_high = 1.5
-        self.bound_low = 0
-        self.STATE_HIGH_BOUND = 10
+        self.bound_high = 0.2
+        self.bound_low = -0.2
+        self.STATE_HIGH_BOUND = 2
         self.STATE_LOW_BOUND = 0
         self.process_index_dict = self.find_phon()
         self.s_dim = len(self.process_index_dict)
@@ -79,7 +77,7 @@ class Env(object):
         return process_index_dict
 
     def low_filter(self, ft_matrix, threshold):
-        ft_filter = np.zeros(shape=(len(ft_matrix), len(ft_matrix[0])), dtype=np.float64)
+        ft_filter = np.zeros(shape=(len(ft_matrix), len(ft_matrix[0])), dtype=float)
         for i in range(len(ft_matrix)):
             for j in range(len(ft_matrix[0])):
                 if ft_matrix[i][j] < threshold:
@@ -110,24 +108,23 @@ class Env(object):
         average_change = overall_change / len(audio1)
         return average_change
 
-    def calculate_reward(self, source_result, processed_result, source_path, phn_hat, s):
+    def calculate_reward(self, source_result, processed_result, source_path, phn_hat, threshold, s, a):
         """ 对那些超出阈值范围的状态进行大力度惩罚 """
-        # threshold_reward = s[0]
-        # s = s[0]
-        # a = a[0]
-        # threshold_reward = np.zeros(shape=(len(s)), dtype=np.float64)
-        # for i in range(len(s)):
-        #     if threshold[i] == self.FLAG_VALUE:
-        #         threshold_reward[i] = 0
-        #     elif s[i] <= self.STATE_LOW_BOUND:
-        #         if a[i] <= 0:
-        #             threshold_reward[i] = np.abs(threshold[i]) * 50
-        #         else:
-        #             threshold_reward[i] = np.abs(threshold[i]) * 10
-        #     elif s[i] >= self.STATE_HIGH_BOUND and a[i] >= 0:
-        #         threshold_reward[i] = threshold[i] * 5
-        #     else:
-        #         threshold_reward[i] = threshold[i]
+        s = s[0]
+        a = a[0]
+        threshold_reward = np.zeros(shape=(len(s)), dtype=float)
+        for i in range(len(s)):
+            if threshold[i] == self.FLAG_VALUE:
+                threshold_reward[i] = 0
+            elif s[i] <= self.STATE_LOW_BOUND:
+                if a[i] <= 0:
+                    threshold_reward[i] = np.abs(threshold[i]) * 50
+                else:
+                    threshold_reward[i] = np.abs(threshold[i]) * 10
+            elif s[i] >= self.STATE_HIGH_BOUND and a[i] >= 0:
+                threshold_reward[i] = threshold[i] * 5
+            else:
+                threshold_reward[i] = threshold[i]
 
         """ 计算MSE分数"""
         if source_result == "RequestError":
@@ -137,10 +134,9 @@ class Env(object):
             wer_value = wer(source_result, processed_result)
 
         global_ft_abs, source_pha, sr = self.process_audio(source_path)
-        global_ft_abs_filter = self.low_filter(global_ft_abs, 1.5)
+        global_ft_abs_filter = self.low_filter(global_ft_abs, max(threshold_reward))
         global_ft = global_ft_abs_filter * source_pha
-        global_ft_hat = librosa.istft(global_ft, n_fft=self.n_fft, hop_length=self.hope_length,
-                                      win_length=self.win_length)
+        global_ft_hat = librosa.istft(global_ft, n_fft=self.n_fft, hop_length=self.hope_length, win_length=self.win_length)
 
         source_hat, _ = soundfile.read(source_path)
 
@@ -154,9 +150,8 @@ class Env(object):
 
         """计算总的reward"""
         # total_threshold =
-        # mean_threshold = np.sum(threshold_reward) / (len(threshold_reward) - len(self.FLAG_EMPTY))
-        # r = wer_value * 100 - MSE_ratio * 70 - mean_threshold * 60
-        r = wer_value * 100 - MSE_ratio * 1500
+        mean_threshold = np.sum(threshold_reward) / (len(threshold_reward) - len(self.FLAG_EMPTY))
+        r = wer_value * 100 - MSE_ratio * 70 - mean_threshold * 60
         return r
 
     def step(self, s, a):
@@ -170,9 +165,9 @@ class Env(object):
         """
         done = False
         r = 0
-        # s_ = s + a
-        s_ = a
+        s_ = s + a
         threshold = s_[0]
+
         """限制阈值范围"""
         threshold[threshold > self.STATE_HIGH_BOUND] = self.STATE_HIGH_BOUND
         threshold[threshold < self.STATE_LOW_BOUND] = self.STATE_LOW_BOUND
@@ -195,16 +190,13 @@ class Env(object):
         '''重建滤波后的音频'''
         ft = ft_abs * pha
         y_hat = librosa.istft(ft, n_fft=self.n_fft, hop_length=self.hope_length, win_length=self.win_length)
-        temp_wirte_path = r'../temp.wav'
+        temp_wirte_path = r'temp.wav'
         soundfile.write(temp_wirte_path, y_hat, samplerate=sr)
         t0 = time.time()
-        trans_result = ASR.asr_api(temp_wirte_path, 'deepspeech')
+        trans_result = ASR.asr_api(temp_wirte_path, 'google')
         t1 = time.time()
-        if trans_result == "Transcirbe error":
-            r = 0
-            self.TRANSERROR_COUTER += 1
-        else:
-            r = self.calculate_reward(self.source_result, trans_result, self.source_path_wav, phn_hat=y_hat, s=s)
+        r = self.calculate_reward(self.source_result, trans_result, self.source_path_wav, phn_hat=y_hat,
+                                  threshold=threshold, s=s, a=a)
         return s_, r, done, t1 - t0
 
     def reset(self):
@@ -230,6 +222,3 @@ class Env(object):
 
     def get_FLAG_EMPTY(self):
         return self.FLAG_EMPTY
-
-    def get_TRANSERROR(self):
-        return self.TRANSERROR_COUTER

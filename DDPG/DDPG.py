@@ -51,7 +51,7 @@ TAU = 0.01  # soft replacement
 MEMORY_CAPACITY = 200  # size of replay buffer
 BATCH_SIZE = 16  # update batchsize
 
-MAX_EPISODES = 20  # total number of episodes for training
+MAX_EPISODES = 10  # total number of episodes for training
 MAX_EP_STEPS = 100  # total number of steps for each episode
 TEST_PER_EPISODES = 10  # test the model per episodes
 RELACE_ITER = 100
@@ -97,10 +97,10 @@ class DDPG(object):
             #     x = tl.layers.BatchNorm(name='A_norm')(x)
             # else:
             #     x = tl.layers.LayerNorm(name='A_norm')(x)
-            x = tl.layers.BatchNorm(num_features=100, name='A_norm')(x)
+            # x = tl.layers.BatchNorm(num_features=100, name='A_norm')(x)
             # x = tl.layers.Dense(n_units=a_dim, act=tf.nn.tanh, W_init=W_init, b_init=b_init, name='A_a1')(x)
-            x = tl.layers.Dense(n_units=a_dim, act=tf.nn.tanh, W_init=W_init, b_init=b_init, name='A_a2')(x)
-            x = tl.layers.Lambda(lambda x: np.array(a_bound) * x)(x)  # 注意这里，先用tanh把范围限定在[-1,1]之间，再进行映射
+            x = tl.layers.Dense(n_units=a_dim, act=tf.nn.relu, W_init=W_init, b_init=b_init, name='A_a2')(x)
+            # x = tl.layers.Lambda(lambda x: np.array(a_bound) * x)(x)  # 注意这里，先用tanh把范围限定在[-1,1]之间，再进行映射
             return tl.models.Model(inputs=inputs, outputs=x, name='Actor' + name)
 
         # 建立Critic网络，输入s，a。输出Q值
@@ -317,16 +317,16 @@ if __name__ == '__main__':
 
                 if r < r_max and ddpg.pointer > MEMORY_CAPACITY:
                     for dim in range(0, len(s[0])):
-                        if s[0][dim] >= 1.5:
-                            a[0][dim] = -np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1))
+                        if s[0][dim] >= 2:
+                            a[0][dim] = -np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.2, 0.2))
                         else:
-                            a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1)
+                            a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.2, 0.2)
                 else:
                     for dim in range(0, len(s[0])):
                         if s[0][dim] <= 0:
-                            a[0][dim] = np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1))
+                            a[0][dim] = np.abs(np.clip(np.random.normal(a[0][dim], VAR), -0.2, 0.2))
                         else:
-                            a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.1, 0.1)
+                            a[0][dim] = np.clip(np.random.normal(a[0][dim], VAR), -0.2, 0.2)
 
                 # a = np.clip(np.random.normal(a, VAR), -0.1, 0.1)
                 # 与环境进行互动
